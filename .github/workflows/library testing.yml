@@ -3,16 +3,16 @@ name: Library workflow
 on:
   push:
    branches:
-      - develop
+      - main
    paths:
-      - 'Folder1/**'
+      - 'Project/**'
   workflow_dispatch: null    
       
 env:
   UIPATHCLI: "& 'C:\\actions-runner\\uipath.cli\\tools\\uipcli.exe'"
   ORCH_FOLDER: 'Shared/CICD_Test'
   FOLDER_NAME:  'CICD_Test'
-  PACKAGE: "package pack ${{ github.workspace }}\\Folder1\\Folder1Test\\project.json -o ${{ github.workspace }}\\package -l en-US --libraryOrchestratorApplicationId ${{secrets.ORCH_OAUTH_CLIENT_ID}} --libraryOrchestratorApplicationSecret '${{secrets.ORCH_CLIENT_SECRET}}' --libraryOrchestratorApplicationScope '${{secrets.ORCH_OAUTH_CLIENT_Scopes}}' --libraryOrchestratorUrl ${{secrets.ORCH_URL}} --libraryOrchestratorTenant ${{secrets.ORCH_TENANT_NAME}} --libraryOrchestratorAccountForApp ${{secrets.ORCH_ACCOUNT_NAME}}"
+  PACKAGE: "package pack ${{ github.workspace }}\\Project\\project.json -o ${{ github.workspace }}\\package -l en-US --libraryOrchestratorApplicationId ${{secrets.ORCH_OAUTH_CLIENT_ID}} --libraryOrchestratorApplicationSecret '${{secrets.ORCH_CLIENT_SECRET}}' --libraryOrchestratorApplicationScope '${{secrets.ORCH_OAUTH_CLIENT_Scopes}}' --libraryOrchestratorUrl ${{secrets.ORCH_URL}} --libraryOrchestratorTenant ${{secrets.ORCH_TENANT_NAME}} --libraryOrchestratorAccountForApp ${{secrets.ORCH_ACCOUNT_NAME}}"
   DEPLOY: "package deploy ${{ github.workspace }}\\package ${{secrets.ORCH_URL}} ${{secrets.ORCH_TENANT_NAME}} -I ${{secrets.ORCH_OAUTH_CLIENT_ID}} -S '${{secrets.ORCH_CLIENT_SECRET}}' --applicationScope '${{secrets.ORCH_OAUTH_CLIENT_SCOPES}}' -A ${{secrets.ORCH_ACCOUNT_NAME}}"
 
 jobs:
@@ -21,8 +21,6 @@ jobs:
     steps:
       - name: Check out repository code
         uses: actions/checkout@v2
-        with:
-          ref: 'develop'
         
       - name: Read Version
         id: read_version
@@ -65,132 +63,22 @@ jobs:
                 Invoke-Expression "${{ env.UIPATHCLI }} ${{env.DEPLOY}} -o ${{env.ORCH_FOLDER}}" 
         # continue-on-error: true
 
-      - name: Set up Git
-        # if: ${{ success() }}
-        run: |
-               git config user.email "actions@github.com"
-               git config user.name "GitHub Actions"
-
-      - name: Disable branch protection
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
-        run: |
-          $headers = @{
-            Authorization = "token $env:GH_TOKEN"
-          }
-          Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository }}/branches/develop/protection" -Method Delete -Headers $headers
-
       - name: Update Version in Release-Version/Version.yml.yml
         run: |
-               git stash push -m "Stashing changes in Folder1" Folder1/
-               git checkout develop
-               git pull origin develop
+               git stash push -m "Stashing changes in Project"
+               git checkout main
+               git pull origin main
                git reset HEAD .
                git restore --source=HEAD --staged -- .
                git restore --source=HEAD -- .
-               git checkout HEAD -- Release_versions/Folder1_version.yml
+               git checkout HEAD -- Release_versions/version.yml
                $incremented_version = $env:INPUT_VERSION
-               (Get-Content "${{ github.workspace }}\Release_versions\Folder1_version.yml") -replace 'version:\s*\d+\.\d+\.\d+', "$incremented_version" | Set-Content "${{ github.workspace }}\Release_versions\Folder1_version.yml"
-               git add "${{ github.workspace }}\Release_versions\Folder1_version.yml"
+               (Get-Content "${{ github.workspace }}\Release_versions\version.yml") -replace 'version:\s*\d+\.\d+\.\d+', "$incremented_version" | Set-Content "${{ github.workspace }}\Release_versions\version.yml"
+               git add "${{ github.workspace }}\Release_versions\version.yml"
                git commit -m "Increment version to $incremented_version"
                git push origin develop
 
         env:
           INPUT_VERSION: ${{ steps.increment_version.outputs.incremented_version }}
 
-      - name: Re-enable branch protection
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
-        run: |
-          $headers = @{
-            Authorization = "token $env:GH_TOKEN"
-            Accept        = "application/vnd.github.luke-cage-preview+json"
-            "Content-Type" = "application/json"
-          }
-          $body = @{
-            required_status_checks = @{
-              strict   = $true
-              contexts = @()
-            }
-            enforce_admins = $true
-            required_pull_request_reviews = @{
-              dismiss_stale_reviews          = $true
-              require_code_owner_reviews     = $true
-              required_approving_review_count = 1
-            }
-            restrictions = $null
-          } | ConvertTo-Json
-          Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository }}/branches/develop/protection" -Method Put -Headers $headers -Body $body
-                
-      - name: Add Tags
-        run: |
-                 $json = Get-Content "${{ github.workspace }}\\project.json" | Out-String | ConvertFrom-Json
-                 $Name=$json.name
-                 
-                 echo "Getting Access Token..."
-                 $accessTokenParams = @{
-                   grant_type='client_credentials';
-                   client_id='${{secrets.ORCH_OAUTH_CLIENT_ID}}';
-                   client_secret='${{secrets.ORCH_CLIENT_SECRET}}';
-                   scope='${{secrets.ORCH_OAUTH_CLIENT_SCOPES}}'
-                 }
-                 $tokenResponse = Invoke-WebRequest -Uri "${{secrets.ORCH_URL}}/identity_/connect/token" `
-                     -Method POST `
-                     -Body $accessTokenParams `
-                     -ContentType application/x-www-form-urlencoded
-                 $temp = $tokenResponse.Content |  ConvertFrom-Json
-                 $access_token = $temp.access_token
-                 
-                 $baseUrl = "${{secrets.ORCH_URL}}/${{secrets.ORCH_ACCOUNT_NAME}}/${{secrets.ORCH_TENANT_NAME}}/orchestrator_/"
-                 
-                 echo "Getting Folder Id..."
-                 $folderUrl = "$($baseUrl)odata/Folders";
-                 $headers = @{
-                   "Authorization" = "Bearer $access_token"
-                   "ContentType" = "application/json"
-                   "Accept" = "application/json"
-                 }
-                          $folderResponse = Invoke-WebRequest `
-                              -Uri $folderUrl `
-                              -Method Get `
-                              -Headers $headers `
-                              -ContentType application/x-www-form-urlencoded
-                          $temp = $folderResponse.Content | ConvertFrom-Json
-                          foreach($folder in $temp.value){
-                              if($folder.DisplayName.equals("${{env.FOLDER_NAME}}")){
-                                  $folderId = $folder.id
-                               }
-                          }
-                          Write-Host $folderId
-                          
-                          $headers += @{
-                              "X-UIPATH-OrganizationUnitId" = "$folderId"
-                          }
-                          
-                          echo "Getting Release Id..."
-                          $releaseUrl = "$($baseUrl)odata/Releases";
-                          $releaseResponse = Invoke-WebRequest `
-                              -Uri $releaseUrl `
-                              -Method Get `
-                              -Headers $headers
-                          $temp = $releaseResponse.Content | ConvertFrom-Json 
-                          foreach($release in $temp.value){
-                              if($release.ProcessKey.equals("$($Name)")){
-                                  $releaseId = $release.Id;
-                              }    
-                          }
-                          Write-Host $releaseId
-                          
-                          echo "Setting Tags..."
-                          $patchUrl = "$($baseUrl)odata/Releases($($releaseId))";
-                          $tags = Get-Content "${{ github.workspace }}\tags.json" | Out-String
-                          $patchResp = Invoke-WebRequest `
-                              -Uri $patchUrl `
-                              -Method PATCH `
-                              -Headers $headers `
-                              -ContentType application/json `
-                              -Body $tags
-                          
-                        
+      
