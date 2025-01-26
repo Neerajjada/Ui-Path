@@ -25,7 +25,7 @@ jobs:
       - name: Read Version
         id: read_version
         run: |
-                $version = Get-Content "${{ github.workspace }}\Release_versions\Folder1_version.yml" | Select-String -Pattern "version:" | ForEach-Object { $_ -replace 'version:/s*', '' }
+                $version = Get-Content "${{ github.workspace }}\Release_versions\version.yml" | Select-String -Pattern "version:" | ForEach-Object { $_ -replace 'version:/s*', '' }
                 Write-Output "Version_current: $version"
                 echo "::set-output name=version::$version"
         shell: PowerShell
