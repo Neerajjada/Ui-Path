@@ -45,7 +45,7 @@ jobs:
         env:
           INPUT_VERSION: ${{ steps.read_version.outputs.version }}
         shell: PowerShell
-        
+
       - name: Build Package
         run: |
                  $incremented_version = $env:INPUT_VERSION
@@ -60,10 +60,18 @@ jobs:
         
       - name: Deploy Package                                                                                                                                                                                        
         run: |
-                Invoke-Expression "${{ env.UIPATHCLI }} ${{env.DEPLOY}} -o ${{env.ORCH_FOLDER}}" 
+                Invoke-Expression "${{ env.UIPATHCLI }} ${{env.DEPLOY}}" 
         # continue-on-error: true
 
-      - name: Update Version in Release-Version/Version.yml.yml
+      - name: Set up Git
+        # if: ${{ success() }}
+        run: |
+               git config user.email "actions@github.com"
+               git config user.name "GitHub Actions"
+
+      
+
+      - name: Update Version in release-version in version.yml
         run: |
                git stash push -m "Stashing changes in Project"
                git checkout main
@@ -71,7 +79,7 @@ jobs:
                git reset HEAD .
                git restore --source=HEAD --staged -- .
                git restore --source=HEAD -- .
-               git checkout HEAD -- Release_versions/version.yml
+               git checkout HEAD -- Release_versions\version.yml
                $incremented_version = $env:INPUT_VERSION
                (Get-Content "${{ github.workspace }}\Release_versions\version.yml") -replace 'version:\s*\d+\.\d+\.\d+', "$incremented_version" | Set-Content "${{ github.workspace }}\Release_versions\version.yml"
                git add "${{ github.workspace }}\Release_versions\version.yml"
@@ -80,5 +88,6 @@ jobs:
 
         env:
           INPUT_VERSION: ${{ steps.increment_version.outputs.incremented_version }}
+
 
       
