@@ -21,6 +21,18 @@ jobs:
     steps:
       - name: Check out repository code
         uses: actions/checkout@v2
+
+      - name: Setup UiPath CLI
+        run: |
+
+          Invoke-WebRequest -Uri https://download.uipath.com/cli/uipcli.zip -OutFile uipcli.zip
+          
+          Expand-Archive -Path uipcli.zip -DestinationPath uipcli -Force
+        
+          $env:Path += ";$PWD\uipcli"
+
+          uipcli --version
+        shell: powershell  
         
       - name: Read Version
         id: read_version
