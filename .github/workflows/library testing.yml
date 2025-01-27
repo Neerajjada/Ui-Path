@@ -25,7 +25,7 @@ jobs:
       - name: Read Version
         id: read_version
         run: |
-                $version = Get-Content "${{ github.workspace }}\Release_versions\version.yml" | Select-String -Pattern "version:" | ForEach-Object { $_ -replace 'version:/s*', '' }
+                $version = Get-Content "${{ github.workspace }}\release_versions\version.yml" | Select-String -Pattern "version:" | ForEach-Object { $_ -replace 'version:/s*', '' }
                 Write-Output "Version_current: $version"
                 echo "::set-output name=version::$version"
         shell: PowerShell
@@ -79,10 +79,10 @@ jobs:
                git reset HEAD .
                git restore --source=HEAD --staged -- .
                git restore --source=HEAD -- .
-               git checkout HEAD -- Release_versions\version.yml
+               git checkout HEAD -- release_versions\version.yml
                $incremented_version = $env:INPUT_VERSION
-               (Get-Content "${{ github.workspace }}\Release_versions\version.yml") -replace 'version:\s*\d+\.\d+\.\d+', "$incremented_version" | Set-Content "${{ github.workspace }}\Release_versions\version.yml"
-               git add "${{ github.workspace }}\Release_versions\version.yml"
+               (Get-Content "${{ github.workspace }}\release_versions\version.yml") -replace 'version:\s*\d+\.\d+\.\d+', "$incremented_version" | Set-Content "${{ github.workspace }}\release_versions\version.yml"
+               git add "${{ github.workspace }}\release_versions\version.yml"
                git commit -m "Increment version to $incremented_version"
                git push origin develop
 
