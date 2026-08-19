@@ -1,0 +1,40 @@
+name: Copy Files to Windows VM
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Copy files via WinRM
+        shell: powershell
+        run: |
+          $Server = "${{ secrets.VM_HOST }}"
+          $Username = "${{ secrets.VM_USERNAME }}"
+          $Password = "${{ secrets.VM_PASSWORD }}" | ConvertTo-SecureString -AsPlainText -Force
+          $Credential = New-Object System.Management.Automation.PSCredential($Username, $Password)
+
+          # Skip SSL certificate validation for self-signed certs (adjust for production)
+          $SessionOption = New-PSSessionOption -SkipCACheck -SkipCNCheck
+
+          Write-Host "Establishing WinRM session to $Server..."
+          $Session = New-PSSession -ComputerName $Server -Credential $Credential -UseSSL -SessionOption $SessionOption
+
+          # Define local source path and remote destination path
+          $SourceFolder = "${{ github.workspace }}/Ui-Path/python/new.txt*"
+          $DestinationFolder = "C:\pythonfiles"   # Update to your target folder
+
+          Write-Host "Copying files to $DestinationFolder..."
+          Copy-Item -Path $SourceFolder -Destination $DestinationFolder -ToSession $Session -Recurse -Force
+
+          # Clean up session
+          Remove-PSSession $Session
+          Write-Host "Deployment completed successfully!"
