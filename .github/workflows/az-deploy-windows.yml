@@ -15,25 +15,28 @@ jobs:
 
       - name: Copy files via WinRM
         shell: powershell
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USERNAME }}
+          VM_PASS: ${{ secrets.VM_PASSWORD }}
         run: |
-          $Server = "${{ secrets.VM_HOST }}"
-          $Username = "${{ secrets.VM_USERNAME }}"
-          $Password = "${{ secrets.VM_PASSWORD }}" | ConvertTo-SecureString -AsPlainText -Force
+          $Server = $env:VM_HOST
+          $Username = $env:VM_USER
+          # Convert environment variable safely to secure string without string interpolation errors
+          $Password = $env:VM_PASS | ConvertTo-SecureString -AsPlainText -Force
           $Credential = New-Object System.Management.Automation.PSCredential($Username, $Password)
 
-          # Skip SSL certificate validation for self-signed certs (adjust for production)
           $SessionOption = New-PSSessionOption -SkipCACheck -SkipCNCheck
 
           Write-Host "Establishing WinRM session to $Server..."
           $Session = New-PSSession -ComputerName $Server -Credential $Credential -UseSSL -SessionOption $SessionOption
 
-          # Define local source path and remote destination path
-          $SourceFolder = "${{ github.workspace }}/Ui-Path/python/new.txt*"
-          $DestinationFolder = "C:\pythonfiles"   # Update to your target folder
+          # Source and destination paths
+          $SourceFolder = "$env:GITHUB_WORKSPACE\python\new.txt"
+          $DestinationFolder = "C:\pythonfiles"
 
           Write-Host "Copying files to $DestinationFolder..."
-          Copy-Item -Path $SourceFolder -Destination $DestinationFolder -ToSession $Session -Recurse -Force
+          Copy-Item -Path $SourceFolder -Destination $DestinationFolder -ToSession $Session -Force
 
-          # Clean up session
           Remove-PSSession $Session
           Write-Host "Deployment completed successfully!"
