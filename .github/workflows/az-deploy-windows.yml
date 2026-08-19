@@ -14,29 +14,52 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Copy files via WinRM
-        shell: powershell
-        env:
-          VM_HOST: ${{ secrets.VM_HOST }}
-          VM_USER: ${{ secrets.VM_USERNAME }}
-          VM_PASS: ${{ secrets.VM_PASSWORD }}
-        run: |
-          $Server = $env:VM_HOST
-          $Username = $env:VM_USER
-          # Convert environment variable safely to secure string without string interpolation errors
-          $Password = $env:VM_PASS | ConvertTo-SecureString -AsPlainText -Force
-          $Credential = New-Object System.Management.Automation.PSCredential($Username, $Password)
+  shell: powershell
+  env:
+    VM_HOST: ${{ secrets.VM_HOST }}
+    VM_USERNAME: ${{ secrets.VM_USERNAME }}
+    VM_PASSWORD: ${{ secrets.VM_PASSWORD }}
 
-          $SessionOption = New-PSSessionOption -SkipCACheck -SkipCNCheck
+  run: |
+    $Server = $env:VM_HOST
+    $Username = $env:VM_USERNAME
+    $SecurePassword = ConvertTo-SecureString $env:VM_PASSWORD -AsPlainText -Force
 
-          Write-Host "Establishing WinRM session to $Server..."
-          $Session = New-PSSession -ComputerName $Server -Credential $Credential -UseSSL -SessionOption $SessionOption
+    $Credential = New-Object System.Management.Automation.PSCredential(
+        $Username,
+        $SecurePassword
+    )
 
-          # Source and destination paths
-          $SourceFolder = "$env:GITHUB_WORKSPACE\python\new.txt"
-          $DestinationFolder = "C:\pythonfiles"
+    # Skip SSL certificate validation for self-signed certificates
+    $SessionOption = New-PSSessionOption `
+        -SkipCACheck `
+        -SkipCNCheck
 
-          Write-Host "Copying files to $DestinationFolder..."
-          Copy-Item -Path $SourceFolder -Destination $DestinationFolder -ToSession $Session -Force
+    Write-Host "Establishing WinRM session to $Server..."
 
-          Remove-PSSession $Session
-          Write-Host "Deployment completed successfully!"
+    $Session = New-PSSession `
+        -ComputerName $Server `
+        -Credential $Credential `
+        -UseSSL `
+        -SessionOption $SessionOption
+
+    try {
+        $SourceFolder = "${{ github.workspace }}/Ui-Path/python/new.txt*"
+        $DestinationFolder = "C:\pythonfiles"
+
+        Write-Host "Copying files to $DestinationFolder..."
+
+        Copy-Item `
+            -Path $SourceFolder `
+            -Destination $DestinationFolder `
+            -ToSession $Session `
+            -Recurse `
+            -Force
+
+        Write-Host "Deployment completed successfully!"
+    }
+    finally {
+        if ($Session) {
+            Remove-PSSession $Session
+        }
+    }
