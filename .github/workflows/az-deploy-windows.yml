@@ -42,7 +42,7 @@ jobs:
             -UseSSL `
             -SessionOption $SessionOption
          try {
-           $SourceFolder = "${{ github.workspace }}/Ui-Path/python/new.txt*"
+           $SourceFolder = "${{ github.workspace }}/Ui-Path/python/new.txt"
            $DestinationFolder = "C:\pythonfiles"
 
             Write-Host "Copying files to $DestinationFolder..."
