@@ -1,1 +1,1 @@
-test document to push to aws windows
+This is the modifications of test document to push to azure windows VM
