@@ -13,7 +13,7 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Copy files via WinRM
+      - name: Copy files via WinRM with Timestamped Backup
         shell: powershell
         env:
           VM_HOST: ${{ secrets.VM_HOST }}
@@ -25,27 +25,47 @@ jobs:
           $PlainPassword = $env:VM_PASSWORD
 
           $SecurePassword = ConvertTo-SecureString -String $PlainPassword -AsPlainText -Force
-
           $Credential = New-Object System.Management.Automation.PSCredential($Username, $SecurePassword)
-
           $SessionOption = New-PSSessionOption -SkipCACheck -SkipCNCheck
 
           Write-Host "Establishing WinRM session to $Server..."
           $Session = New-PSSession -ComputerName $Server -Credential $Credential -UseSSL -SessionOption $SessionOption
 
           try {
-              $SourcePath = "${{ github.workspace }}\python/new.txt"
+              $SourcePath = Join-Path -Path $env:GITHUB_WORKSPACE -ChildPath "Ui-Path\python\new.txt"
               $DestinationFolder = "C:\pythonfiles"
 
+              # 1. Ensure target directory exists and create uniquely timestamped backup
               Invoke-Command -Session $Session -ScriptBlock {
                   param($Dest)
+
                   if (-not (Test-Path -Path $Dest)) {
                       New-Item -ItemType Directory -Path $Dest -Force | Out-Null
                   }
+
+                  $TargetFile = Join-Path -Path $Dest -ChildPath "new.txt"
+
+                  if (Test-Path -Path $TargetFile) {
+                      # Generates date and 24-hr time string: e.g. 18-Sep-2026_14-30-15
+                      $Timestamp = (Get-Date).ToString("dd-MMM-yyyy_HH-mm-ss")
+                      $BackupFileName = "backup_${Timestamp}_new.txt"
+                      $BackupPath = Join-Path -Path $Dest -ChildPath $BackupFileName
+
+                      # Collision fallback in case runs happen in the exact same second
+                      $Counter = 1
+                      while (Test-Path -Path $BackupPath) {
+                          $BackupFileName = "backup_${Timestamp}_(${Counter})_new.txt"
+                          $BackupPath = Join-Path -Path $Dest -ChildPath $BackupFileName
+                          $Counter++
+                      }
+
+                      Write-Host "Backing up existing file to $BackupFileName..."
+                      Copy-Item -Path $TargetFile -Destination $BackupPath -Force
+                  }
               } -ArgumentList $DestinationFolder
 
-              Write-Host "Copying $SourcePath to $DestinationFolder..."
-
+              # 2. Copy the latest file from repo to destination
+              Write-Host "Copying latest file $SourcePath to $DestinationFolder..."
               Copy-Item -Path $SourcePath -Destination $DestinationFolder -ToSession $Session -Force
 
               Write-Host "Deployment completed successfully!"
