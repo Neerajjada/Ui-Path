@@ -34,7 +34,7 @@ jobs:
           $Session = New-PSSession -ComputerName $Server -Credential $Credential -UseSSL -SessionOption $SessionOption
 
           try {
-              $SourcePath = Join-Path -Path $env:GITHUB_WORKSPACE -ChildPath "Ui-Path\python\new.txt"
+              $SourcePath = "${{ github.workspace }}\python/new.txt"
               $DestinationFolder = "C:\pythonfiles"
 
               Invoke-Command -Session $Session -ScriptBlock {
