@@ -1,4 +1,4 @@
-name: Windows via SSH
+name: Copy Files to Windows VM via SSH (Password)
 
 on:
   push:
@@ -13,76 +13,65 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Set up SSH Key
-        run: |
-          # Create the .ssh directory if it doesn't exist
-          $sshDir = "$HOME\.ssh"
-          if (-not (Test-Path $sshDir)) {
-              New-Item -ItemType Directory -Path $sshDir -Force | Out-Null
-          }
-          
-          # Write the private key from secrets to a file
-          $env:VM_SSH_KEY | Out-File -Encoding ascii -NoNewline "$sshDir\id_rsa"
-          
-          # Set correct permissions for OpenSSH (Windows equivalent of chmod 600)
-          icacls "$sshDir\id_rsa" /inheritance:r
-          icacls "$sshDir\id_rsa" /grant:r "$($env:USERNAME):R"
-        env:
-          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
-
-      - name: Execute Backup and File Transfer via SSH/SCP
+      - name: Copy files via PowerShell over SSH with Timestamped Backup
         shell: powershell
         env:
           VM_HOST: ${{ secrets.VM_HOST }}
           VM_USERNAME: ${{ secrets.VM_USERNAME }}
+          VM_PASSWORD: ${{ secrets.VM_PASSWORD }}
           VM_PORT: ${{ secrets.VM_PORT | default('22') }}
         run: |
-          $Server =$env:VM_HOST
-          $Username =$env:VM_USERNAME
-          $Port =$env:VM_PORT
-          $SourcePath = "${{ github.workspace }}\python\new.txt"
-          $DestinationFolder = "C:\pythonfiles"
+          $Server = $env:VM_HOST
+          $Username = $env:VM_USERNAME
+          $PlainPassword = $env:VM_PASSWORD
+          $Port = $env:VM_PORT
 
-          # 1. Run remote PowerShell script via SSH to backup existing file & ensure directory exists
-          Write-Host "Connecting to $Server:$Port via SSH for backup..."
-          
-          $RemoteScript = @"
-          $Dest = '$DestinationFolder'
-          if (-not (Test-Path -Path $Dest)) {
-              New-Item -ItemType Directory -Path $Dest -Force | Out-Null
+          $SecurePassword = ConvertTo-SecureString -String $PlainPassword -AsPlainText -Force
+          $Credential = New-Object System.Management.Automation.PSCredential($Username, $SecurePassword)
+
+          Write-Host "Establishing SSH session to $Server on port $Port..."
+          # Using -HostName and -Port enables PowerShell remoting over SSH (Port 22) instead of WinRM (Port 5986)
+          $Session = New-PSSession -HostName $Server -Port $Port -Credential $Credential
+
+          try {
+              $SourcePath = "${{ github.workspace }}\python\new.txt"
+              $DestinationFolder = "C:\pythonfiles"
+
+              # 1. Ensure target directory exists and create uniquely timestamped backup
+              Invoke-Command -Session $Session -ScriptBlock {
+                  param($Dest)
+
+                  if (-not (Test-Path -Path $Dest)) {
+                      New-Item -ItemType Directory -Path $Dest -Force | Out-Null
+                  }
+
+                  $TargetFile = Join-Path -Path $Dest -ChildPath "new.txt"
+
+                  if (Test-Path -Path $TargetFile) {
+                      $Timestamp = (Get-Date).ToString("dd-MMM-yyyy_HH-mm-ss")
+                      $BackupFileName = "backup_${Timestamp}_new.txt"
+                      $BackupPath = Join-Path -Path $Dest -ChildPath $BackupFileName
+
+                      $Counter = 1
+                      while (Test-Path -Path $BackupPath) {
+                          $BackupFileName = "backup_${Timestamp}_(${Counter})_new.txt"
+                          $BackupPath = Join-Path -Path $Dest -ChildPath $BackupFileName
+                          $Counter++
+                      }
+
+                      Write-Host "Backing up existing file to $BackupFileName..."
+                      Copy-Item -Path $TargetFile -Destination $BackupPath -Force
+                  }
+              } -ArgumentList $DestinationFolder
+
+              # 2. Copy the latest file from repo to destination over the SSH session
+              Write-Host "Copying latest file $SourcePath to $DestinationFolder..."
+              Copy-Item -Path $SourcePath -Destination $DestinationFolder -ToSession $Session -Force
+
+              Write-Host "Deployment completed successfully!"
           }
-          $TargetFile = Join-Path -Path$Dest -ChildPath 'new.txt'
-          if (Test-Path -Path $TargetFile) {
-              `$Timestamp = (Get-Date).ToString('dd-MMM-yyyy_HH-mm-ss')
-              `$BackupFileName = "backup_`$Timestamp`_new.txt"
-              `$BackupPath = Join-Path -Path `$Dest -ChildPath `$BackupFileName
-              
-              `$Counter = 1
-              while (Test-Path -Path `$BackupPath) {
-                  `$BackupFileName = "backup_`$Timestamp`_(`$Counter)_new.txt"
-                  `$BackupPath = Join-Path -Path `$Dest -ChildPath `$BackupFileName
-                  `$Counter++
+          finally {
+              if ($Session) {
+                  Remove-PSSession -Session $Session
               }
-              Write-Host "Backing up existing file to `$BackupFileName..."
-              Copy-Item -Path `$TargetFile -Destination `$BackupPath -Force
           }
-          "@
-
-          # Execute remote script over SSH
-          ssh -o StrictHostKeyChecking=no -p $Port "${Username}@${Server}" "powershell -Command `"$RemoteScript`""
-
-          if ($LASTEXITCODE -ne 0) {
-              Write-Error "Remote backup step failed."
-              exit $LASTEXITCODE
-          }
-
-          # 2. Copy the latest file from runner to remote VM using scp
-          Write-Host "Copying latest file to $Server:$DestinationFolder..."
-          scp -o StrictHostKeyChecking=no -P $Port "$SourcePath" "${Username}@${Server}:$DestinationFolder\"
-
-          if ($LASTEXITCODE -ne 0) {
-              Write-Error "SCP file transfer failed."
-              exit $LASTEXITCODE
-          }
-
-          Write-Host "Deployment completed successfully!"
