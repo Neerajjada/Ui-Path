@@ -19,7 +19,7 @@ jobs:
           VM_HOST: ${{ secrets.VM_HOST }}
           VM_USERNAME: ${{ secrets.VM_USERNAME }}
           VM_PASSWORD: ${{ secrets.VM_PASSWORD }}
-          VM_PORT: ${{ secrets.VM_PORT | default('22') }}
+          
         run: |
           $Server = $env:VM_HOST
           $Username = $env:VM_USERNAME
