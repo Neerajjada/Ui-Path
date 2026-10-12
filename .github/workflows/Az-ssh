@@ -1,4 +1,4 @@
-name: Copy Files to Windows VM via SSH
+name: Windows via SSH
 
 on:
   push:
